@@ -1,0 +1,60 @@
+package me.shils.redis
+
+import groovy.transform.NotYetImplemented
+import org.codehaus.groovy.control.CompilerConfiguration
+import org.codehaus.groovy.control.customizers.ImportCustomizer
+
+
+class RedisScriptTest extends GroovyShellTestCase {
+
+  @Override
+  protected GroovyShell createNewShell() {
+    def icz = new ImportCustomizer().addStaticImport('me.shils.redis.RedisScriptHelper', 'redisScript')
+    def config = new CompilerConfiguration().addCompilationCustomizers(icz)
+    new GroovyShell(config)
+  }
+
+  @NotYetImplemented
+  void testCallRedis() {
+    assertScriptResult '''
+      redisScript {
+        set(keys[0], argv[0])
+      }
+    ''', "return redis.call('set', KEYS[1], ARGV[1])"
+  }
+
+  @NotYetImplemented
+  void testIfElseStatement() {
+    assertScriptResult '''
+      redisScript {
+        if (argv.length > 0) {
+          'non-zero'
+        } else {
+          'zero'
+        }
+      }
+    ''', """
+if table.getn(ARGV) > 0 then
+  return 'non-zero'
+else
+  return 'zero'
+    """
+  }
+
+  @NotYetImplemented
+  void testVariableDeclaration() {
+    assertScriptResult '''
+      redisScript {
+        def i = 1
+        i + argv[0]
+      }
+    ''', """
+local i = 1
+return i + ARGV[1]
+    """
+  }
+
+  void assertScriptResult(String script, String expected) {
+    assert shell.evaluate(script) == expected.trim()
+  }
+}

@@ -1,0 +1,20 @@
+group 'me.shils'
+version '0.1.0-SNAPSHOT'
+
+apply plugin: 'groovy'
+
+sourceCompatibility = 1.7
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compile 'org.codehaus.groovy:groovy:2.4.6'
+  compile 'redis.clients:jedis:2.8.0'
+  testCompile 'org.codehaus.groovy:groovy-test:2.4.6'
+  testCompile 'junit:junit:4.11'
+  testCompile 'org.spockframework:spock-core:1.0-groovy-2.4'
+  testCompile 'cglib:cglib-nodep:3.2.2'
+  testCompile 'org.objenesis:objenesis:2.2'
+}
