@@ -3,6 +3,8 @@ package me.shils.redis
 import groovy.transform.NotYetImplemented
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.customizers.ImportCustomizer
+import org.intellij.lang.annotations.Language
+import static me.shils.redis.RedisScriptHelper.redisScript
 
 
 class RedisScriptTest extends GroovyShellTestCase {
@@ -54,7 +56,7 @@ return i + ARGV[1]
     """
   }
 
-  void assertScriptResult(String script, String expected) {
+  void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script) == expected.trim()
   }
 }

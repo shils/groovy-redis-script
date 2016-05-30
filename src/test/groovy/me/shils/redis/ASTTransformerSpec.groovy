@@ -1,11 +1,11 @@
 package me.shils.redis
 
-import org.codehaus.groovy.ast.ClassHelper
-import org.codehaus.groovy.ast.ClassNode
+
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
 import org.codehaus.groovy.ast.expr.ConstantExpression
 import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
+import org.codehaus.groovy.ast.expr.EmptyExpression
 import org.codehaus.groovy.ast.expr.Expression
 import org.codehaus.groovy.ast.expr.FieldExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
@@ -13,7 +13,6 @@ import org.codehaus.groovy.ast.expr.TernaryExpression
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.ErrorCollector
 import org.codehaus.groovy.control.SourceUnit
-import org.codehaus.groovy.control.messages.ExceptionMessage
 import org.codehaus.groovy.syntax.Token
 import org.codehaus.groovy.syntax.Types
 import spock.lang.Specification
@@ -43,7 +42,7 @@ class ASTTransformerSpec extends Specification {
     expect:
     result instanceof ConstantExpression
     result.type == STRING_TYPE
-    result.value == 'foo'
+    result.value == "'foo'"
   }
 
   def 'Number literals'(Number number) {
@@ -59,24 +58,64 @@ class ASTTransformerSpec extends Specification {
     number << [1, 1L, 1G, 1.0f, 1.0d, 1.0G, 0x1]
   }
 
-  def 'Assignment expressions'() {
-    given:
-    def result = transformer.transform(assignX(varX('foo'), constX(1)))
+  def 'Assignment expressions are only supported as statements'() {
+    when: 'assignment that is a statement'
+    def statement = assignS(varX('foo'), constX(1))
+    transformer.visitExpressionStatement(statement)
 
-    expect:
+    and:
+    def result = statement.expression
+
+    then:
     result instanceof ConstantExpression
     result.type == STRING_TYPE
     result.value == 'foo = 1'
+
+    when: 'assignment that is not a statement'
+    result = transformer.transform(assignX(varX('foo'), constX(1)))
+
+    then:
+    1 * errorCollector.addErrorAndContinue({
+      it.cause.message.contains('Assignments which are not statements are not supported in Redis scripts')
+    })
   }
 
-  def 'Declaration expressions'() {
-    given:
-    def result = transformer.transform(declS(varX('foo'), constX(1)).expression)
+  def 'Declaration expressions are only supported as statements'() {
+    when: 'declaration that is a statement'
+    def statement = declS(varX('foo'), constX(1))
+    transformer.visitExpressionStatement(statement)
 
-    expect: 'variable is declared local'
+    and:
+    def result = statement.expression
+
+    then: 'variable is declared local'
     result instanceof ConstantExpression
     result.type == STRING_TYPE
     result.value == 'local foo = 1'
+
+    when: 'declaration that is not a statement'
+    result = transformer.transform(assignX(varX('foo'), constX(1)))
+
+    then:
+    1 * errorCollector.addErrorAndContinue({
+      it.cause.message.contains('Assignments which are not statements are not supported in Redis scripts')
+    })
+  }
+
+  def 'Empty declarations'() {
+    given:
+    def statement = declS(varX('foo'), EmptyExpression.INSTANCE)
+
+    when:
+    transformer.visitExpressionStatement(statement)
+
+    and:
+    def result = statement.expression
+
+    then:
+    result instanceof ConstantExpression
+    result.type == STRING_TYPE
+    result.value == 'local foo'
   }
 
   def 'Comparison expressions'() {
@@ -115,8 +154,10 @@ class ASTTransformerSpec extends Specification {
     when:
     def result = transformer.transform(expr)
 
-    then:
-    1 * errorCollector.addException({ it instanceof UnsupportedExpressionException && it.expression == expr }, sourceUnit)
+    then: //TODO make the message condition more specific
+    1 * errorCollector.addErrorAndContinue({
+      it.cause.message.contains('are not supported in Redis scripts')
+    })
 
     where:
     exprType << [
