@@ -16,11 +16,10 @@ class RedisScriptTest extends GroovyShellTestCase {
     new GroovyShell(config)
   }
 
-  @NotYetImplemented
   void testCallRedis() {
     assertScriptResult '''
       redisScript {
-        set(keys[0], argv[0])
+        set(keys[1], argv[1])
       }
     ''', "return redis.call('set', KEYS[1], ARGV[1])"
   }
@@ -43,12 +42,11 @@ else
     """
   }
 
-  @NotYetImplemented
   void testVariableDeclaration() {
     assertScriptResult '''
       redisScript {
         def i = 1
-        i + argv[0]
+        i + argv[1]
       }
     ''', """
 local i = 1
