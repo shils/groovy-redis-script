@@ -24,7 +24,6 @@ class RedisScriptTest extends GroovyShellTestCase {
     ''', "return redis.call('set', KEYS[1], ARGV[1])"
   }
 
-  @NotYetImplemented
   void testIfElseStatement() {
     assertScriptResult '''
       redisScript {
@@ -36,9 +35,9 @@ class RedisScriptTest extends GroovyShellTestCase {
       }
     ''', """
 if table.getn(ARGV) > 0 then
-  return 'non-zero'
+return 'non-zero'
 else
-  return 'zero'
+return 'zero'
     """
   }
 
@@ -55,6 +54,6 @@ return i + ARGV[1]
   }
 
   void assertScriptResult(@Language('Groovy') String script, String expected) {
-    assert shell.evaluate(script) == expected.trim()
+    assert shell.evaluate(script).trim() == expected.trim()
   }
 }

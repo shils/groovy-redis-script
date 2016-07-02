@@ -8,6 +8,7 @@ import org.codehaus.groovy.ast.CodeVisitorSupport
 import org.codehaus.groovy.ast.MethodNode
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
+import org.codehaus.groovy.ast.expr.BooleanExpression
 import org.codehaus.groovy.ast.expr.ConstantExpression
 import org.codehaus.groovy.ast.expr.DeclarationExpression
 import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
@@ -26,6 +27,7 @@ import org.codehaus.groovy.ast.stmt.BreakStatement
 import org.codehaus.groovy.ast.stmt.CaseStatement
 import org.codehaus.groovy.ast.stmt.ContinueStatement
 import org.codehaus.groovy.ast.stmt.DoWhileStatement
+import org.codehaus.groovy.ast.stmt.EmptyStatement
 import org.codehaus.groovy.ast.stmt.ExpressionStatement
 import org.codehaus.groovy.ast.stmt.ForStatement
 import org.codehaus.groovy.ast.stmt.IfStatement
@@ -52,7 +54,6 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   static final List<Class<? extends Expression>> UNSUPPORTED_EXPRESSION_TYPES = [
           FieldExpression,
-          PropertyExpression,
           AttributeExpression,
           StaticMethodCallExpression
   ]
@@ -71,6 +72,8 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   private StringBuilder buffer = new StringBuilder()
 
+  private boolean onNewLine = false
+
   String getBufferValue() {
     buffer.toString()
   }
@@ -78,6 +81,7 @@ class RedisScriptGenerator extends CodeVisitorSupport {
   String convertToLuaSource(Expression expr) {
     if (UNSUPPORTED_EXPRESSION_TYPES.any { it.isInstance(expr) }) {
       addError("${expr.class.simpleName}s are not supported in Redis scripts".toString(), expr)
+      return null
     }
     switch (expr.class) {
       case ConstantExpression:
@@ -92,6 +96,10 @@ class RedisScriptGenerator extends CodeVisitorSupport {
         return transformElvisExpression((ElvisOperatorExpression) expr)
       case MethodCallExpression:
         return transformMethodCallExpression((MethodCallExpression) expr)
+      case PropertyExpression:
+        return transformPropertyExpression((PropertyExpression) expr)
+      case BooleanExpression:
+        return convertToLuaSource(((BooleanExpression) expr).expression)
       case TernaryExpression:
         addError('Ternary expressions are not supported in Redis scripts', expr)
     }
@@ -101,8 +109,7 @@ class RedisScriptGenerator extends CodeVisitorSupport {
   @Override
   void visitExpressionStatement(ExpressionStatement es) {
     es.expression.putNodeMetaData(ExpressionStatement, true)
-    buffer.append(convertToLuaSource(es.expression))
-    buffer.append('\n')
+    write(convertToLuaSource(es.expression))
   }
 
   @Override
@@ -117,7 +124,7 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitReturnStatement(ReturnStatement statement) {
-    buffer.append('return ' + convertToLuaSource(statement.expression))
+    write('return ' + convertToLuaSource(statement.expression))
   }
 
   @Override
@@ -127,7 +134,16 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitIfElse(IfStatement ifElse) {
-    super.visitIfElse(ifElse)
+    write('if ' + convertToLuaSource(ifElse.booleanExpression) + ' then')
+    newLine()
+    ifElse.ifBlock.visit(this)
+    newLine()
+    if (ifElse.elseBlock && !(ifElse.elseBlock instanceof EmptyStatement)) {
+      write('else')
+      newLine()
+      ifElse.elseBlock.visit(this)
+      newLine()
+    }
   }
 
   @Override
@@ -158,6 +174,14 @@ class RedisScriptGenerator extends CodeVisitorSupport {
   @Override
   void visitDoWhileLoop(DoWhileStatement loop) {
     super.visitDoWhileLoop(loop)
+  }
+
+  @Override
+  void visitBlockStatement(BlockStatement block) {
+    block.statements.each {
+      it.visit(this)
+      newLine()
+    }
   }
 
   @Override
@@ -223,6 +247,14 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     null
   }
 
+  private String transformPropertyExpression(PropertyExpression pexp) {
+    if (isArray(pexp.objectExpression) && pexp.propertyAsString == 'length') {
+      return 'table.getn(' + convertToLuaSource(pexp.objectExpression) + ')'
+    }
+    addError('Property expressions are not supported in Redis scripts', pexp)
+    null
+  }
+
   private String transformVariableExpression(VariableExpression vexp) {
     if (vexp.name == 'argv') {
       return 'ARGV'
@@ -245,5 +277,27 @@ class RedisScriptGenerator extends CodeVisitorSupport {
                     sourceUnit
             )
     )
+  }
+
+  private void write(String string) {
+    buffer.append(string)
+    onNewLine = false
+  }
+
+  private void newLine() {
+    if (!onNewLine) {
+      buffer.append('\n')
+      onNewLine = true
+    }
+  }
+
+  private static boolean isArray(Expression expression) {
+    if (expression.type.isArray()) {
+      return true
+    } else if (expression instanceof VariableExpression) {
+      String name = ((VariableExpression) expression).name
+      return name == 'argv' || name == 'keys'
+    }
+    false
   }
 }

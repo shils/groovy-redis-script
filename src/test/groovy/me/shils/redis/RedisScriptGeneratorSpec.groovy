@@ -1,6 +1,6 @@
 package me.shils.redis
 
-
+import org.codehaus.groovy.ast.ClassNode
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
 import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
@@ -9,6 +9,7 @@ import org.codehaus.groovy.ast.expr.Expression
 import org.codehaus.groovy.ast.expr.FieldExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
 import org.codehaus.groovy.ast.expr.TernaryExpression
+import org.codehaus.groovy.ast.expr.VariableExpression
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.ErrorCollector
 import org.codehaus.groovy.control.SourceUnit
@@ -63,7 +64,7 @@ class RedisScriptGeneratorSpec extends Specification {
     def result = transformer.bufferValue
 
     then:
-    result == 'foo = 1\n'
+    result == 'foo = 1'
 
     when: 'assignment that is not a statement'
     result = transformer.convertToLuaSource(assignX(varX('foo'), constX(1)))
@@ -83,7 +84,7 @@ class RedisScriptGeneratorSpec extends Specification {
     def result = transformer.bufferValue
 
     then: 'variable is declared local'
-    result == 'local foo = 1\n'
+    result == 'local foo = 1'
 
     when: 'declaration that is not a statement'
     result = transformer.convertToLuaSource(assignX(varX('foo'), constX(1)))
@@ -105,7 +106,7 @@ class RedisScriptGeneratorSpec extends Specification {
     def result = transformer.bufferValue
 
     then:
-    result == 'local foo\n'
+    result == 'local foo'
   }
 
   def 'Comparison expressions'() {
@@ -128,6 +129,31 @@ class RedisScriptGeneratorSpec extends Specification {
 
     then:
     result == 'foo or bar'
+  }
+
+  def "'keys' variable expression is compiled to lua 'KEYS' variable"() {
+    expect:
+    transformer.convertToLuaSource(varX('keys')) == 'KEYS'
+  }
+
+  def "'argv' variable expression is compiled to lua 'ARGV' variable"() {
+    expect:
+    transformer.convertToLuaSource(varX('argv')) == 'ARGV'
+  }
+
+  def 'array.length property expressions'() {
+    when: 'receiver is variable referring to an array'
+    def receiverType = Stub(ClassNode) { isArray() >> true }
+    def receiver = Stub(VariableExpression) {
+      getName() >> 'foo'
+      getType() >> receiverType
+    }
+
+    and:
+    def result = transformer.convertToLuaSource(propX(receiver, constX('length')))
+
+    then:
+    result == 'table.getn(foo)'
   }
 
   @Unroll
