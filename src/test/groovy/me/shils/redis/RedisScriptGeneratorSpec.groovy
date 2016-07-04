@@ -129,6 +129,18 @@ class RedisScriptGeneratorSpec extends Specification {
 
     then:
     result == 'foo or bar'
+
+    when: 'General case'
+    def elvis = new ElvisOperatorExpression(
+            Mock(Expression) { 1 * getNodeMetaData(_) >> 'first' },
+            Mock(Expression) { 1 * getNodeMetaData(_) >> 'second' }
+    )
+
+    and:
+    result = transformer.convertToLuaSource(elvis)
+
+    then:
+    result == 'first or second'
   }
 
   def "'keys' variable expression is compiled to lua 'KEYS' variable"() {
@@ -142,25 +154,33 @@ class RedisScriptGeneratorSpec extends Specification {
   }
 
   def 'array.length property expressions'() {
-    when: 'receiver is variable referring to an array'
+    given:
     def receiverType = Stub(ClassNode) { isArray() >> true }
-    def receiver = Stub(VariableExpression) {
-      getName() >> 'foo'
+
+    when: 'receiver has array type'
+    def receiver = Mock(Expression) {
       getType() >> receiverType
+      1 * getNodeMetaData(RedisScriptGenerator) >> 'foo'
     }
 
-    and:
-    def result = transformer.convertToLuaSource(propX(receiver, constX('length')))
+    then:
+    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(foo)'
+
+    when: "receiver is 'keys' variable"
+    receiver = varX('keys')
 
     then:
-    result == 'table.getn(foo)'
+    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(KEYS)'
+
+    when: "receiver is 'argv' variable"
+    receiver = varX('argv')
+
+    then:
+    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(ARGV)'
   }
 
   @Unroll
-  def 'Expressions of type #exprType result in UnsupportedExpressionException being added to error collector'(Class<? extends Expression> exprType) {
-    given:
-    def expr = Stub(exprType)
-
+  def 'Expressions of type #{expr.class} result in UnsupportedExpressionException being added to error collector'(Expression expr) {
     when:
     def result = transformer.convertToLuaSource(expr)
 
@@ -170,11 +190,11 @@ class RedisScriptGeneratorSpec extends Specification {
     })
 
     where:
-    exprType << [
-            FieldExpression,
-            PropertyExpression,
-            AttributeExpression,
-            TernaryExpression
+    expr << [
+            new FieldExpression(null),
+            new PropertyExpression(Stub(Expression), ''),
+            new AttributeExpression(null, null),
+            new TernaryExpression(null, null, null)
     ]
   }
 
