@@ -61,6 +61,9 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   SourceUnit sourceUnit
 
+  @Delegate
+  TransformedASTManager manager = new TransformedASTManager()
+
   private StringBuilder buffer = new StringBuilder()
 
   private boolean onNewLine = false
@@ -69,9 +72,9 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     buffer.toString()
   }
 
-  String convertToLuaSource(Expression expr) {
-    expr.visit(this)
-    expr.getNodeMetaData(RedisScriptGenerator).toString()
+  String convertToLuaSource(ASTNode node) {
+    node.visit(this)
+    getLuaSource(node)
   }
 
   @Override
@@ -312,7 +315,13 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     false
   }
 
-  private static void storeLuaSource(Expression expr, String luaSource) {
-    expr.putNodeMetaData(RedisScriptGenerator, luaSource)
+  static class TransformedASTManager {
+    String getLuaSource(ASTNode node) {
+      (String) node.getNodeMetaData(RedisScriptGenerator)
+    }
+
+    void storeLuaSource(ASTNode node, String luaSource) {
+      node.putNodeMetaData(RedisScriptGenerator, luaSource)
+    }
   }
 }
