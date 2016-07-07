@@ -53,7 +53,47 @@ return i + ARGV[1]
     """
   }
 
+  void testAssertNotSupported() {
+    String error = shouldFail '''
+      redisScript {
+        assert 1 == 1
+      }
+    '''
+    assert error.contains('Asserts are not supported')
+  }
+
+  void testSwitchNotSupported() {
+    String error = shouldFail '''
+      redisScript {
+        switch(3) {
+          case 4: return 5
+          case 3: return 2
+        }
+      }
+    '''
+    assert error.contains('Switch statements are not supported')
+  }
+
+  void testSynchronizedNotSupported() {
+    String error = shouldFail '''
+      redisScript {
+        synchronized (this) {
+          return 5
+        }
+      }
+    '''
+    assert error.contains('Synchronized blocks are not supported')
+  }
+
   void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script).trim() == expected.trim()
+  }
+
+  String shouldFail(@Language('Groovy') String script) {
+    try {
+      shell.evaluate(script)
+    } catch (Exception e) {
+      return e.message
+    }
   }
 }
