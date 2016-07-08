@@ -3,6 +3,7 @@ package me.shils.redis
 import org.codehaus.groovy.ast.ClassNode
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
+import org.codehaus.groovy.ast.expr.DeclarationExpression
 import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
 import org.codehaus.groovy.ast.expr.EmptyExpression
 import org.codehaus.groovy.ast.expr.Expression
@@ -15,6 +16,7 @@ import org.codehaus.groovy.control.ErrorCollector
 import org.codehaus.groovy.control.SourceUnit
 import org.codehaus.groovy.syntax.Token
 import org.codehaus.groovy.syntax.Types
+import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -24,9 +26,10 @@ class RedisScriptGeneratorSpec extends Specification {
 
   private static final Token GT = Token.newSymbol(Types.COMPARE_GREATER_THAN, -1 , -1)
 
-  def sourceUnit
-  def errorCollector
+  SourceUnit sourceUnit
+  ErrorCollector errorCollector
   RedisScriptGenerator transformer
+  @Shared ClassNode arrayType = Stub(ClassNode) { isArray() >> true }
 
   def setup() {
     sourceUnit = Mock(SourceUnit)
@@ -55,19 +58,38 @@ class RedisScriptGeneratorSpec extends Specification {
     number << [1, 1L, 1G, 1.0f, 1.0d, 1.0G, 0x1]
   }
 
+  def 'variable expressions'(String name, String transformed) {
+    given:
+    def vexp = varX(name)
+
+    expect:
+    transformer.convertToLuaSource(vexp) == transformed
+
+    where:
+    name   || transformed
+    'foo'  || 'foo'
+    'keys' || 'KEYS'
+    'argv' || 'ARGV'
+  }
+
   def 'Assignment expressions are only supported as statements'() {
+    given:
+    def target = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'foo' }
+    def value = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'bar' }
+    def statement = assignS(target, value)
+    def expression = assignX(target, value)
+
     when: 'assignment that is a statement'
-    def statement = assignS(varX('foo'), constX(1))
-    transformer.visitExpressionStatement(statement)
+    transformer.convertToLuaSource(statement)
 
     and:
     def result = transformer.bufferValue
 
     then:
-    result == 'foo = 1'
+    result == 'foo = bar'
 
     when: 'assignment that is not a statement'
-    result = transformer.convertToLuaSource(assignX(varX('foo'), constX(1)))
+    transformer.convertToLuaSource(expression)
 
     then:
     1 * errorCollector.addErrorAndContinue({
@@ -76,18 +98,22 @@ class RedisScriptGeneratorSpec extends Specification {
   }
 
   def 'Declaration expressions are only supported as statements'() {
+    def target = Stub(VariableExpression) { getNodeMetaData(RedisScriptGenerator) >> 'foo' }
+    def value = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'bar' }
+    def statement = declS(target, value)
+    def expression = new DeclarationExpression(target, ASSIGN, value)
+
     when: 'declaration that is a statement'
-    def statement = declS(varX('foo'), constX(1))
-    transformer.visitExpressionStatement(statement)
+    transformer.convertToLuaSource(statement)
 
     and:
     def result = transformer.bufferValue
 
     then: 'variable is declared local'
-    result == 'local foo = 1'
+    result == 'local foo = bar'
 
     when: 'declaration that is not a statement'
-    result = transformer.convertToLuaSource(assignX(varX('foo'), constX(1)))
+    transformer.convertToLuaSource(expression)
 
     then:
     1 * errorCollector.addErrorAndContinue({
@@ -97,10 +123,11 @@ class RedisScriptGeneratorSpec extends Specification {
 
   def 'Empty declarations'() {
     given:
-    def statement = declS(varX('foo'), EmptyExpression.INSTANCE)
+    def target = Stub(VariableExpression) { getNodeMetaData(RedisScriptGenerator) >> 'foo' }
+    def statement = declS(target, EmptyExpression.INSTANCE)
 
     when:
-    transformer.visitExpressionStatement(statement)
+    transformer.convertToLuaSource(statement)
 
     and:
     def result = transformer.bufferValue
@@ -110,37 +137,24 @@ class RedisScriptGeneratorSpec extends Specification {
   }
 
   def 'Comparison expressions'() {
-    when:
-    def result = transformer.convertToLuaSource(ltX(varX('foo'), constX(3)))
+    given:
+    def left = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'lhs' }
+    def right = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'rhs' }
 
-    then:
-    result == 'foo < 3'
-
-    when:
-    result = transformer.convertToLuaSource(gtX(varX('foo'), constX(3)))
-
-    then:
-    result == 'foo > 3'
+    expect:
+    transformer.convertToLuaSource(ltX(left, right)) == 'lhs < rhs'
+    transformer.convertToLuaSource(gtX(left, right)) == 'lhs > rhs'
   }
 
   def 'Elvis expressions are compiled to lua or expressions'() {
-    when:
-    def result = transformer.convertToLuaSource(new ElvisOperatorExpression(varX('foo'), varX('bar')))
-
-    then:
-    result == 'foo or bar'
-
-    when: 'General case'
+    given:
     def elvis = new ElvisOperatorExpression(
-            Mock(Expression) { 1 * getNodeMetaData(_) >> 'first' },
-            Mock(Expression) { 1 * getNodeMetaData(_) >> 'second' }
+            Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'first' },
+            Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'second' }
     )
 
-    and:
-    result = transformer.convertToLuaSource(elvis)
-
-    then:
-    result == 'first or second'
+    expect:
+    transformer.convertToLuaSource(elvis) == 'first or second'
   }
 
   def "'keys' variable expression is compiled to lua 'KEYS' variable"() {
@@ -153,30 +167,18 @@ class RedisScriptGeneratorSpec extends Specification {
     transformer.convertToLuaSource(varX('argv')) == 'ARGV'
   }
 
-  def 'array.length property expressions'() {
+  def 'array.length property expressions'(Expression receiver, String result) {
     given:
-    def receiverType = Stub(ClassNode) { isArray() >> true }
+    def expr = propX(receiver, constX('length'))
 
-    when: 'receiver has array type'
-    def receiver = Mock(Expression) {
-      getType() >> receiverType
-      1 * getNodeMetaData(RedisScriptGenerator) >> 'foo'
-    }
+    expect:
+    transformer.convertToLuaSource(expr) == result
 
-    then:
-    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(foo)'
-
-    when: "receiver is 'keys' variable"
-    receiver = varX('keys')
-
-    then:
-    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(KEYS)'
-
-    when: "receiver is 'argv' variable"
-    receiver = varX('argv')
-
-    then:
-    transformer.convertToLuaSource(propX(receiver, constX('length'))) == 'table.getn(ARGV)'
+    where:
+    receiver                                                                                    || result
+    Stub(Expression) { getType() >> arrayType; getNodeMetaData(RedisScriptGenerator) >> 'foo' } || 'table.getn(foo)'
+    varX('keys')                                                                                || 'table.getn(KEYS)'
+    varX('argv')                                                                                || 'table.getn(ARGV)'
   }
 
   @Unroll
