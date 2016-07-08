@@ -12,6 +12,9 @@ import org.codehaus.groovy.ast.expr.EmptyExpression
 import org.codehaus.groovy.ast.expr.Expression
 import org.codehaus.groovy.ast.expr.ExpressionTransformer
 import org.codehaus.groovy.ast.expr.FieldExpression
+import org.codehaus.groovy.ast.expr.ListExpression
+import org.codehaus.groovy.ast.expr.MapEntryExpression
+import org.codehaus.groovy.ast.expr.MapExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
 import org.codehaus.groovy.ast.expr.TernaryExpression
 import org.codehaus.groovy.ast.expr.VariableExpression
@@ -226,7 +229,6 @@ class RedisScriptGeneratorSpec extends Specification {
 
     and:
     with(manager) {
-      getLuaSource(_ as ConstantExpression) >> { ConstantExpression ce -> ce.value }
       getLuaSource(_ as VariableExpression) >> { VariableExpression ve -> ve.name in ['keys', 'argv'] ? ve.name.toUpperCase() : ve.name }
       getLuaSource(_ as DummyExpression) >> 'foo'
     }
@@ -261,6 +263,93 @@ class RedisScriptGeneratorSpec extends Specification {
             new AttributeExpression(null, null),
             new TernaryExpression(null, null, null)
     ]
+  }
+
+  def 'Lists are compiled to lua tables'() {
+    given:
+    def list
+    def first = Stub(Expression)
+    def second = Stub(Expression)
+
+    and:
+    with(manager) {
+      getLuaSource(first) >> 'first'
+      getLuaSource(second) >> 'second'
+    }
+
+    when: 'empty list'
+    list = new ListExpression()
+    transformer.convertToLuaSource(list)
+
+    then:
+    1 * manager.storeLuaSource({ list }, '{}')
+
+    when: 'single element list'
+    list = new ListExpression([first])
+    transformer.convertToLuaSource(list)
+
+    then:
+    1 * manager.storeLuaSource({ list }, '{first}')
+
+    when: 'multi element list'
+    list = new ListExpression([first, second])
+    transformer.convertToLuaSource(list)
+
+    then:
+    1 * manager.storeLuaSource({ list }, '{first, second}')
+  }
+
+  def 'Map entry expressions'() {
+    given:
+    def key = Stub(Expression)
+    def value = Stub(Expression)
+    def entry = new MapEntryExpression(key, value)
+
+    and:
+    with(manager) {
+      getLuaSource(key) >> 'foo'
+      getLuaSource(value) >> 'bar'
+    }
+
+    when:
+    transformer.convertToLuaSource(entry)
+
+    then:
+    1 * manager.storeLuaSource(entry, '[foo]=bar')
+  }
+
+  def 'Maps are compiled to lua tables'() {
+    given:
+    def map
+    def first = Stub(MapEntryExpression)
+    def second = Stub(MapEntryExpression)
+
+    and:
+    with(manager) {
+      getLuaSource(first) >> '[first]=foo'
+      getLuaSource(second) >> '[second]=bar'
+    }
+
+    when: 'empty map'
+    map = new MapExpression()
+    transformer.convertToLuaSource(map)
+
+    then:
+    1 * manager.storeLuaSource({ map }, '{}')
+
+    when: 'single entry map'
+    map = new MapExpression([first])
+    transformer.convertToLuaSource(map)
+
+    then:
+    1 * manager.storeLuaSource({ map }, '{[first]=foo}')
+
+    when: 'multi entry map'
+    map = new MapExpression([first, second])
+    transformer.convertToLuaSource(map)
+
+    then:
+    1 * manager.storeLuaSource({ map }, '{[first]=foo, [second]=bar}')
   }
 
   private static BinaryExpression gtX(Expression lhv, Expression rhv) {
