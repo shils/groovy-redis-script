@@ -15,6 +15,9 @@ import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
 import org.codehaus.groovy.ast.expr.EmptyExpression
 import org.codehaus.groovy.ast.expr.Expression
 import org.codehaus.groovy.ast.expr.FieldExpression
+import org.codehaus.groovy.ast.expr.ListExpression
+import org.codehaus.groovy.ast.expr.MapEntryExpression
+import org.codehaus.groovy.ast.expr.MapExpression
 import org.codehaus.groovy.ast.expr.MethodCallExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
 import org.codehaus.groovy.ast.expr.StaticMethodCallExpression
@@ -269,6 +272,36 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     String name = expression.name
     String result = name == 'argv' ? 'ARGV' : name == 'keys' ? 'KEYS' : name
     storeLuaSource(expression, result)
+  }
+
+  @Override
+  void visitListExpression(ListExpression expression) {
+    String result = '{' + transformListOfExpressions(expression.expressions) + '}'
+    storeLuaSource(expression, result)
+  }
+
+  @Override
+  void visitMapExpression(MapExpression expression) {
+    String result = '{' + transformListOfExpressions(expression.mapEntryExpressions) + '}'
+    storeLuaSource(expression, result)
+  }
+
+  private String transformListOfExpressions(List<? extends Expression> expressions) {
+    def sb = new StringBuilder()
+    if (expressions.size() > 0) {
+      sb.append(convertToLuaSource(expressions[0]))
+    }
+    expressions.size() > 1 && expressions.tail().each {
+      sb.append(', ').append(convertToLuaSource(it))
+    }
+    sb.toString()
+  }
+
+  @Override
+  void visitMapEntryExpression(MapEntryExpression expression) {
+    String key = convertToLuaSource(expression.keyExpression)
+    String value = convertToLuaSource(expression.valueExpression)
+    storeLuaSource(expression, '[' + key + ']' + '=' + value)
   }
 
   private void addError(String msg, ASTNode expr) {

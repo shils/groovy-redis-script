@@ -8,6 +8,9 @@ import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
 import org.codehaus.groovy.ast.expr.EmptyExpression
 import org.codehaus.groovy.ast.expr.Expression
 import org.codehaus.groovy.ast.expr.FieldExpression
+import org.codehaus.groovy.ast.expr.ListExpression
+import org.codehaus.groovy.ast.expr.MapEntryExpression
+import org.codehaus.groovy.ast.expr.MapExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
 import org.codehaus.groovy.ast.expr.TernaryExpression
 import org.codehaus.groovy.ast.expr.VariableExpression
@@ -198,6 +201,39 @@ class RedisScriptGeneratorSpec extends Specification {
             new AttributeExpression(null, null),
             new TernaryExpression(null, null, null)
     ]
+  }
+
+  def 'Lists are compiled to lua tables'() {
+    given:
+    def first = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'first' }
+    def second = Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'second' }
+
+    expect:
+    transformer.convertToLuaSource(new ListExpression()) == '{}'
+    transformer.convertToLuaSource(new ListExpression([first])) == '{first}'
+    transformer.convertToLuaSource(new ListExpression([first, second])) == '{first, second}'
+  }
+
+  def 'Map entry expressions'() {
+    given:
+    def entry = new MapEntryExpression(
+            Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'foo' },
+            Stub(Expression) { getNodeMetaData(RedisScriptGenerator) >> 'bar' }
+    )
+
+    expect:
+    transformer.convertToLuaSource(entry) == '[foo]=bar'
+  }
+
+  def 'Maps are compiled to lua tables'() {
+    given:
+    def first = Stub(MapEntryExpression) { getNodeMetaData(RedisScriptGenerator) >> '[first]=foo' }
+    def second = Stub(MapEntryExpression) { getNodeMetaData(RedisScriptGenerator) >> '[second]=bar'}
+
+    expect:
+    transformer.convertToLuaSource(new MapExpression()) == '{}'
+    transformer.convertToLuaSource(new MapExpression([first])) == '{[first]=foo}'
+    transformer.convertToLuaSource(new MapExpression([first, second])) == '{[first]=foo, [second]=bar}'
   }
 
   private static BinaryExpression gtX(Expression lhv, Expression rhv) {
