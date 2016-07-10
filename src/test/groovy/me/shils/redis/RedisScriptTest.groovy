@@ -38,6 +38,25 @@ if table.getn(ARGV) > 0 then
 return 'non-zero'
 else
 return 'zero'
+end
+    """
+  }
+
+  void testIfStatementWithoutElse() {
+    assertScriptResult '''
+      redisScript {
+        String result = 'zero'
+        if (argv.length > 0) {
+          result = 'non-zero'
+        }
+        result
+      }
+    ''', """
+local result = 'zero'
+if table.getn(ARGV) > 0 then
+result = 'non-zero'
+end
+return result
     """
   }
 

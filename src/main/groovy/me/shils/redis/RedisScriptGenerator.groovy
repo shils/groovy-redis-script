@@ -124,6 +124,8 @@ class RedisScriptGenerator extends CodeVisitorSupport {
       ifElse.elseBlock.visit(this)
       newLine()
     }
+    write('end')
+    newLine()
   }
 
   @Override
