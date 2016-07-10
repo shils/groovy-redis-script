@@ -98,6 +98,24 @@ return i + ARGV[1]
     assert error.contains('Only enhanced for loops are supported')
   }
 
+  void testWhileLoop() {
+    assertScriptResult '''
+      redisScript {
+        int i = 0
+        while (i < 10) {
+          i = i + 1
+        }
+        i
+      }
+    ''', '''
+local i = 0
+while i < 10 do
+i = i + 1
+end
+return i
+    '''
+  }
+
   void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script).trim() == expected.trim()
   }

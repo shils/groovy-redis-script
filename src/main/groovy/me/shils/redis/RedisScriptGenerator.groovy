@@ -94,7 +94,12 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitWhileLoop(WhileStatement loop) {
-    super.visitWhileLoop(loop)
+    write('while ' + convertToLuaSource(loop.booleanExpression) + ' do')
+    newLine()
+    loop.loopBlock.visit(this)
+    newLine()
+    write('end')
+    newLine()
   }
 
   @Override
