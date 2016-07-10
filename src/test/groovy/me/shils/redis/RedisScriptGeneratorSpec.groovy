@@ -61,6 +61,21 @@ class RedisScriptGeneratorSpec extends Specification {
     number << [1, 1L, 1G, 1.0f, 1.0d, 1.0G, 0x1]
   }
 
+  def 'Boolean literals'(boolean bool, String result) {
+    expect:
+    transformer.convertToLuaSource(constX(bool)) == result
+
+    where:
+    bool  || result
+    true  || 'true'
+    false || 'false'
+  }
+
+  def 'null is compiled to nil'() {
+    expect:
+    transformer.convertToLuaSource(constX(null)) == 'nil'
+  }
+
   def 'variable expressions'(String name, String transformed) {
     given:
     def vexp = varX(name)

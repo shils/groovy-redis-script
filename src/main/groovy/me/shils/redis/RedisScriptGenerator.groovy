@@ -196,7 +196,8 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitConstantExpression(ConstantExpression expression) {
-    String result = expression.type == ClassHelper.STRING_TYPE ? "'${expression.text}'".toString() : expression.text
+    String result = expression.isNullExpression() ? 'nil'
+            : expression.type == ClassHelper.STRING_TYPE ? "'${expression.text}'".toString() : expression.text
     storeLuaSource(expression, result)
   }
 
