@@ -9,6 +9,7 @@ import org.codehaus.groovy.ast.MethodNode
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
 import org.codehaus.groovy.ast.expr.BooleanExpression
+import org.codehaus.groovy.ast.expr.ClosureListExpression
 import org.codehaus.groovy.ast.expr.ConstantExpression
 import org.codehaus.groovy.ast.expr.DeclarationExpression
 import org.codehaus.groovy.ast.expr.ElvisOperatorExpression
@@ -85,6 +86,9 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitForLoop(ForStatement forLoop) {
+    if (forLoop.collectionExpression instanceof ClosureListExpression) {
+      addError('Only enhanced for loops are supported in Redis scripts', forLoop)
+    }
     super.visitForLoop(forLoop)
   }
 

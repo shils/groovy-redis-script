@@ -85,6 +85,19 @@ return i + ARGV[1]
     assert error.contains('Synchronized blocks are not supported')
   }
 
+  void testStandardForLoopNotSupported() {
+    String error = shouldFail '''
+      redisScript {
+        int total = 0
+        for (int i = 0; i < 10; i++) {
+          total = total + i
+        }
+        total
+      }
+    '''
+    assert error.contains('Only enhanced for loops are supported')
+  }
+
   void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script).trim() == expected.trim()
   }
