@@ -145,7 +145,8 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitBreakStatement(BreakStatement statement) {
-    super.visitBreakStatement(statement)
+    write('break')
+    newLine()
   }
 
   @Override

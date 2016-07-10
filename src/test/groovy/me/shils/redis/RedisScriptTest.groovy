@@ -135,6 +135,30 @@ return i
     '''
   }
 
+  void testBreakInLoop() {
+    assertScriptResult '''
+      redisScript {
+        int i = 0
+        while (true) {
+          i = i + 1
+          if (i == 10) {
+            break
+          }
+        }
+        i
+      }
+    ''', '''
+local i = 0
+while true do
+i = i + 1
+if i == 10 then
+break
+end
+end
+return i
+    '''
+  }
+
   void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script).trim() == expected.trim()
   }
