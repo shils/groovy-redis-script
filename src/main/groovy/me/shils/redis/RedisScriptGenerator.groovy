@@ -21,6 +21,7 @@ import org.codehaus.groovy.ast.expr.MapEntryExpression
 import org.codehaus.groovy.ast.expr.MapExpression
 import org.codehaus.groovy.ast.expr.MethodCallExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
+import org.codehaus.groovy.ast.expr.RangeExpression
 import org.codehaus.groovy.ast.expr.StaticMethodCallExpression
 import org.codehaus.groovy.ast.expr.TernaryExpression
 import org.codehaus.groovy.ast.expr.TupleExpression
@@ -89,7 +90,27 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     if (forLoop.collectionExpression instanceof ClosureListExpression) {
       addError('Only enhanced for loops are supported in Redis scripts', forLoop)
     }
-    super.visitForLoop(forLoop)
+    ClassNode collectionType = forLoop.collectionExpression.type
+    if (collectionType.name == ClassHelper.MAP_TYPE.nameWithoutPackage) {
+      addError('Enhanced for loops over maps are not supported', forLoop)
+      return
+    }
+
+    if (collectionType.name == ClassHelper.LIST_TYPE.nameWithoutPackage) {
+      write("for _, ${forLoop.variable.name} in ipairs(" + convertToLuaSource(forLoop.collectionExpression) + ') do')
+    } else if (forLoop.collectionExpression instanceof RangeExpression) {
+      RangeExpression range = (RangeExpression) forLoop.collectionExpression
+      StringBuilder sb = new StringBuilder("for ${forLoop.variable.name} = ${convertToLuaSource(range.from)}, ${convertToLuaSource(range.to)}")
+      if (!range.inclusive) {
+        sb.append(' - 1')
+      }
+      write(sb.append(', 1 do').toString())
+    }
+    newLine()
+    forLoop.loopBlock.visit(this)
+    newLine()
+    write('end')
+    newLine()
   }
 
   @Override

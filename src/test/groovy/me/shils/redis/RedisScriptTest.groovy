@@ -159,6 +159,62 @@ return i
     '''
   }
 
+  void testEnhancedForLoopOverList() {
+    assertScriptResult '''
+      redisScript {
+        int s = 0
+        List<Integer> l = [1,2,3]
+        for (i in l) {
+            s = s + i
+        }
+        s
+      }
+    ''', '''
+local s = 0
+local l = {1, 2, 3}
+for _, i in ipairs(l) do
+s = s + i
+end
+return s
+    '''
+  }
+
+  void testEnhancedForLoopOverRange() {
+    assertScriptResult '''
+      redisScript {
+        int s = 0
+        for (i in (1..10)) {
+            s = s + i
+        }
+        s
+      }
+    ''', '''
+local s = 0
+for i = 1, 10, 1 do
+s = s + i
+end
+return s
+    '''
+  }
+
+  void testEnhancedForLoopOverExclusiveRange() {
+    assertScriptResult '''
+      redisScript {
+        int s = 0
+        for (i in (1..<10)) {
+            s = s + i
+        }
+        s
+      }
+    ''', '''
+local s = 0
+for i = 1, 10 - 1, 1 do
+s = s + i
+end
+return s
+    '''
+  }
+
   void assertScriptResult(@Language('Groovy') String script, String expected) {
     assert shell.evaluate(script).trim() == expected.trim()
   }
