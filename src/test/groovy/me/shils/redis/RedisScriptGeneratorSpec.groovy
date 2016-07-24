@@ -1,5 +1,6 @@
 package me.shils.redis
 
+import org.codehaus.groovy.ast.ClassHelper
 import org.codehaus.groovy.ast.ClassNode
 import org.codehaus.groovy.ast.expr.AttributeExpression
 import org.codehaus.groovy.ast.expr.BinaryExpression
@@ -249,6 +250,61 @@ class RedisScriptGeneratorSpec extends Specification {
     transformer.convertToLuaSource(new MapExpression()) == '{}'
     transformer.convertToLuaSource(new MapExpression([first])) == '{[first]=foo}'
     transformer.convertToLuaSource(new MapExpression([first, second])) == '{[first]=foo, [second]=bar}'
+  }
+
+  def 'length() and size() method calls on Strings'(String method) {
+    given:
+    def receiver = Mock(Expression) {
+      getType() >> ClassHelper.STRING_TYPE;
+      getNodeMetaData(RedisScriptGenerator) >> 'foo'
+    }
+
+    when:
+    def expr = callX(receiver, method)
+    expr.implicitThis = false
+
+    and:
+    def result = transformer.convertToLuaSource(expr)
+
+    then:
+    1 * receiver.visit(transformer)
+    result == 'string.len(foo)'
+
+    where:
+    method << ['length', 'size']
+  }
+
+  def 'size() method calls on Lists'() {
+    given:
+    def receiver = Mock(Expression) {
+      getType() >> ClassHelper.LIST_TYPE;
+      getNodeMetaData(RedisScriptGenerator) >> 'foo'
+    }
+
+    when:
+    def expr = callX(receiver, 'size')
+    expr.implicitThis = false
+
+    and:
+    def result = transformer.convertToLuaSource(expr)
+
+    then:
+    1 * receiver.visit(transformer)
+    result == 'table.getn(foo)'
+  }
+
+  def 'Unsupported groovy method calls result in errors'() {
+    given:
+    def expr = callX(new MapExpression(), 'size')
+    expr.implicitThis = false
+
+    when:
+    def result = transformer.convertToLuaSource(expr)
+
+    then:
+    1 * errorCollector.addErrorAndContinue({
+      it.cause.message.contains('Map#size is not supported in Redis scripts')
+    })
   }
 
   private static BinaryExpression gtX(Expression lhv, Expression rhv) {

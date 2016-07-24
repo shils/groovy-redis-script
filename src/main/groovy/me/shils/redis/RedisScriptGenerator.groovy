@@ -19,6 +19,7 @@ import org.codehaus.groovy.ast.expr.FieldExpression
 import org.codehaus.groovy.ast.expr.ListExpression
 import org.codehaus.groovy.ast.expr.MapEntryExpression
 import org.codehaus.groovy.ast.expr.MapExpression
+import org.codehaus.groovy.ast.expr.MethodCall
 import org.codehaus.groovy.ast.expr.MethodCallExpression
 import org.codehaus.groovy.ast.expr.PropertyExpression
 import org.codehaus.groovy.ast.expr.RangeExpression
@@ -64,6 +65,12 @@ class RedisScriptGenerator extends CodeVisitorSupport {
           Types.LEFT_SQUARE_BRACKET
   ]
 
+  private static final Map<String, ClassNode> UNQUALIFIED_TYPES = [
+          String: ClassHelper.STRING_TYPE,
+          List: ClassHelper.LIST_TYPE,
+          Map: ClassHelper.MAP_TYPE
+  ]
+
   SourceUnit sourceUnit
 
   private StringBuilder buffer = new StringBuilder()
@@ -90,13 +97,13 @@ class RedisScriptGenerator extends CodeVisitorSupport {
     if (forLoop.collectionExpression instanceof ClosureListExpression) {
       addError('Only enhanced for loops are supported in Redis scripts', forLoop)
     }
-    ClassNode collectionType = forLoop.collectionExpression.type
-    if (collectionType.name == ClassHelper.MAP_TYPE.nameWithoutPackage) {
+    ClassNode collectionType = getType(forLoop.collectionExpression)
+    if (collectionType == ClassHelper.MAP_TYPE) {
       addError('Enhanced for loops over maps are not supported', forLoop)
       return
     }
 
-    if (collectionType.name == ClassHelper.LIST_TYPE.nameWithoutPackage) {
+    if (collectionType == ClassHelper.LIST_TYPE) {
       write("for _, ${forLoop.variable.name} in ipairs(" + convertToLuaSource(forLoop.collectionExpression) + ') do')
     } else if (forLoop.collectionExpression instanceof RangeExpression) {
       RangeExpression range = (RangeExpression) forLoop.collectionExpression
@@ -272,8 +279,19 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   @Override
   void visitMethodCallExpression(MethodCallExpression call) {
-    List<Expression> args = ((TupleExpression) call.arguments).expressions
-    List<MethodNode> methods = REDIS_COMMANDS_TYPE.getDeclaredMethods(call.getMethodAsString())
+    String result = call.implicitThis ? transformRedisCommand(call) : transformGroovyMethodCall(call)
+    if (result) {
+      storeLuaSource(call, result)
+    } else if (call.implicitThis) {
+      addError("No such redis command: ${call.methodAsString}".toString(), call)
+    } else {
+      addError("Method ${getMethodDescriptor(call)} is not supported in Redis scripts".toString(), call)
+    }
+  }
+
+  private String transformRedisCommand(MethodCallExpression mce) {
+    List<Expression> args = ((TupleExpression) mce.arguments).expressions
+    List<MethodNode> methods = REDIS_COMMANDS_TYPE.getDeclaredMethods(mce.getMethodAsString())
     MethodNode method = methods.find {
       int numParams = it.parameters.size()
       //TODO handle empty varargs case
@@ -285,10 +303,29 @@ class RedisScriptGenerator extends CodeVisitorSupport {
       args.each {
         sb.append(", ${convertToLuaSource(it)}".toString())
       }
-      storeLuaSource(call, sb.append(')').toString())
-    } else {
-      addError("No such redis command: ${call.methodAsString}".toString(), call.method)
+      return sb.append(')').toString()
     }
+    null
+  }
+
+  private String transformGroovyMethodCall(MethodCallExpression mce) {
+    ClassNode receiverType = getType(mce.objectExpression)
+    switch (mce.methodAsString) {
+      case 'size':
+        if (receiverType == ClassHelper.STRING_TYPE) {
+          return 'string.len(' + convertToLuaSource(mce.objectExpression) + ')'
+        } else if (receiverType == ClassHelper.LIST_TYPE) {
+          return 'table.getn(' + convertToLuaSource(mce.objectExpression) + ')'
+        }
+        break
+      case 'length':
+        if (receiverType == ClassHelper.STRING_TYPE) {
+          return 'string.len(' + convertToLuaSource(mce.objectExpression) + ')'
+        }
+        break
+      default: return null
+    }
+    null
   }
 
   @Override
@@ -385,5 +422,15 @@ class RedisScriptGenerator extends CodeVisitorSupport {
 
   private static String getLuaSource(ASTNode node) {
     (String) node.getNodeMetaData(RedisScriptGenerator)
+  }
+
+  private static ClassNode getType(Expression expr) {
+    ClassNode type = expr.type
+    ClassNode resolvedType = type.isResolved() ? type : UNQUALIFIED_TYPES[type.name]
+    resolvedType ?: type
+  }
+
+  private static String getMethodDescriptor(MethodCallExpression call) {
+    "${getType(call.objectExpression).name}#${call.methodAsString}".toString()
   }
 }
