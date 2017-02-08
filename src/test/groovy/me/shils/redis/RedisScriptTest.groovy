@@ -1,11 +1,9 @@
 package me.shils.redis
 
-import groovy.transform.NotYetImplemented
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.customizers.ImportCustomizer
 import org.intellij.lang.annotations.Language
-import static me.shils.redis.RedisScriptHelper.redisScript
-
+import static RedisScriptHelper.redisScript
 
 class RedisScriptTest extends GroovyShellTestCase {
 
@@ -21,7 +19,7 @@ class RedisScriptTest extends GroovyShellTestCase {
       redisScript {
         set(keys[1], argv[1])
       }
-    ''', "return redis.call('set', KEYS[1], ARGV[1])"
+    ''', "return redis.call('set', KEYS[1], ARGV[1])", 'OK', ['x'], ['1']
   }
 
   void testIfElseStatement() {
@@ -39,7 +37,7 @@ return 'non-zero'
 else
 return 'zero'
 end
-    """
+    """, 'zero'
   }
 
   void testIfStatementWithoutElse() {
@@ -57,7 +55,7 @@ if table.getn(ARGV) > 0 then
 result = 'non-zero'
 end
 return result
-    """
+    """, 'zero'
   }
 
   void testVariableDeclaration() {
@@ -69,7 +67,7 @@ return result
     ''', """
 local i = 1
 return i + ARGV[1]
-    """
+    """, 5, [], ['4']
   }
 
   void testAssertNotSupported() {
@@ -132,7 +130,7 @@ while i < 10 do
 i = i + 1
 end
 return i
-    '''
+    ''', 10
   }
 
   void testBreakInLoop() {
@@ -156,7 +154,7 @@ break
 end
 end
 return i
-    '''
+    ''', 10
   }
 
   void testEnhancedForLoopOverList() {
@@ -176,7 +174,7 @@ for _, i in ipairs(l) do
 s = s + i
 end
 return s
-    '''
+    ''', 6
   }
 
   void testEnhancedForLoopOverRange() {
@@ -194,7 +192,7 @@ for i = 1, 10, 1 do
 s = s + i
 end
 return s
-    '''
+    ''', 55
   }
 
   void testEnhancedForLoopOverExclusiveRange() {
@@ -212,10 +210,10 @@ for i = 1, 10 - 1, 1 do
 s = s + i
 end
 return s
-    '''
+    ''', 45
   }
 
-  void assertScriptResult(@Language('Groovy') String script, String expected) {
+  void assertScriptResult(@Language('Groovy') String script, String expected, Object result, List<String> keys = [], List<String> args = []) {
     assert shell.evaluate(script).trim() == expected.trim()
   }
 
